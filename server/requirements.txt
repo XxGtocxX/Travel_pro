@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+openenv
+openenv-core
+langchain-openai
+langgraph
+openai

@@ -1,0 +1,233 @@
+import random
+from uuid import uuid4
+from typing import List, Optional, Dict, Any, Tuple
+from openenv.core.env_server.interfaces import Environment
+from openenv.core.env_server.types import State
+
+from travel_pro.models import UserGoal, TravelObservation, TravelAction, Search, Book, Finalize
+from travel_pro.database import SessionLocal, init_db, bulk_insert_data, Flight, Hotel
+from travel_pro.scenarios import ScenarioManager
+
+class TravelEnv(Environment):
+    """
+    Travel Pro Environment implementing goal-oriented travel booking.
+    """
+    
+    def __init__(self):
+        self._state = State(episode_id=str(uuid4()), step_count=0)
+        self.current_goal: Optional[UserGoal] = None
+        self.itinerary: List[str] = []
+        self.balance: float = 0.0
+        self.error_log: List[str] = []
+        self.price_volatility: bool = False
+        self.seen_prices: Dict[int, float] = {}  # flight_id -> price at last search
+        self.done: bool = False
+
+    def reset(self, level: int = 1) -> TravelObservation:
+        """
+        Resets the environment to a specific entropy level.
+        """
+        # 1. Get Scenario and Goal
+        self.current_goal, env_config = ScenarioManager.get_scenario(level)
+        
+        # 2. Rebuild Database
+        init_db()
+        self._populate_db()
+        
+        # 3. Level 2 Special Logic: Hotel Strike
+        if level == 2:
+            self._apply_hotel_strike(self.current_goal.destination)
+            
+        # 4. Level 3 Special Logic: Price Volatility Flag
+        self.price_volatility = (level == 3)
+        
+        # 5. Reset internal state
+        self._state = State(episode_id=str(uuid4()), step_count=0)
+        self.itinerary = []
+        self.balance = self.current_goal.budget
+        self.error_log = ["Environment reset successful."]
+        self.seen_prices = {}
+        self.done = False
+        
+        return self._get_obs()
+
+    def step(self, action: TravelAction) -> Tuple[TravelObservation, float, bool, Dict[str, Any]]:
+        """
+        Executes a step in the environment.
+        Returns: (observation, reward, done, info)
+        """
+        assert self.current_goal is not None, "Environment must be reset before step."
+        self._state.step_count += 1
+        reward = -0.05  # Efficiency penalty per step
+        
+        # Level 3: Dynamic Price Updates
+        if self.price_volatility:
+            self._update_prices()
+            
+        act = action.action
+        step_reward = 0.0
+        
+        if isinstance(act, Search):
+            step_reward = self._handle_search(act)
+        elif isinstance(act, Book):
+            step_reward = self._handle_book(act)
+        elif isinstance(act, Finalize):
+            step_reward, self.done = self._handle_finalize()
+        
+        reward += step_reward
+        
+        # Check step limit
+        if self._state.step_count >= self.current_goal.max_steps:
+            if not self.done:
+                reward -= 1.0  # Penalty for not finishing in time
+                self.error_log.append("Deadline reached. Mission failed.")
+            self.done = True
+            
+        info = {
+            "step_count": self._state.step_count,
+            "itinerary_length": len(self.itinerary)
+        }
+        
+        return self._get_obs(), reward, self.done, info
+
+    def _get_obs(self) -> TravelObservation:
+        """Constructs the current observation."""
+        db = SessionLocal()
+        flights = db.query(Flight).limit(5).all()
+        hotels = db.query(Hotel).limit(5).all()
+        db.close()
+        
+        options = [f"Flight {f.id}: {f.origin}->{f.destination} ${f.price:.2f}" for f in flights]
+        options += [f"Hotel {h.id}: {h.name} in {h.city} ${h.price_per_night:.2f} Star: {h.rating}" for h in hotels]
+        
+        return TravelObservation(
+            itinerary=self.itinerary,
+            available_options=options,
+            balance=self.balance,
+            current_goal=self.current_goal,
+            error_log=self.error_log,
+            done=self.done
+        )
+
+    def _populate_db(self):
+        """Initial data population using bulk_insert_data."""
+        flights = []
+        for i in range(20):
+            flights.append({
+                "origin": random.choice(["NYC", "LAX", "CHI", "SFO"]),
+                "destination": random.choice(["PAR", "LON", "TKY", "SYD"]),
+                "price": random.uniform(300, 1500),
+                "seats_available": random.randint(1, 10),
+                "is_direct": random.choice([True, False])
+            })
+        
+        hotels = []
+        cities = ["PAR", "LON", "TKY", "SYD", "NYC", "LAX", "CHI", "SFO"]
+        for i in range(20):
+            hotels.append({
+                "city": random.choice(cities),
+                "name": f"Hotel {random.randint(100, 999)}",
+                "price_per_night": random.uniform(100, 600),
+                "rating": random.uniform(1.0, 5.0)
+            })
+        
+        bulk_insert_data(flights, hotels)
+
+    def _apply_hotel_strike(self, city: str):
+        """Simulates a strike by deleting 50% of hotels in the destination city."""
+        db = SessionLocal()
+        hotels = db.query(Hotel).filter(Hotel.city == city).all()
+        if hotels:
+            to_delete = hotels[:len(hotels)//2]
+            for h in to_delete:
+                db.delete(h)
+            db.commit()
+            self.error_log.append(f"HOTEL_STRIKE detected in {city}. Availability reduced.")
+        db.close()
+
+    def _update_prices(self):
+        """Updates prices dynamically for Level 3 Chaos."""
+        db = SessionLocal()
+        flights = db.query(Flight).all()
+        for f in flights:
+            f.price *= (1 + random.uniform(0.01, 0.05))
+        db.commit()
+        db.close()
+
+    def _handle_search(self, action: Search) -> float:
+        """Handles searching and tracks prices for expiry checks."""
+        db = SessionLocal()
+        # In a real implementation, we'd filter by query. For now, we update seen_prices.
+        flights = db.query(Flight).all()
+        for f in flights:
+            self.seen_prices[f.id] = f.price
+        db.close()
+        self.error_log.append(f"Search performed: {action.query}. Prices updated in local cache.")
+        return 0.0
+
+    def _handle_book(self, action: Book) -> float:
+        """Handles booking with price expiry and constraint validation."""
+        db = SessionLocal()
+        reward = 0.0
+        
+        if action.item_type == "flight":
+            item = db.query(Flight).filter(Flight.id == action.item_id).first()
+            if not item:
+                self.error_log.append(f"Flight {action.item_id} not found.")
+                return -0.1
+            
+            # Price Expiry Check (Chaos)
+            if self.price_volatility and action.item_id in self.seen_prices:
+                if item.price > self.seen_prices[action.item_id]:
+                    self.error_log.append("Price expired. Re-search required.")
+                    db.close()
+                    return -0.1
+
+            # Constraint Validation (Direct Flight)
+            if self.current_goal.is_direct_flight_required and not item.is_direct:
+                reward -= 1.0
+                self.error_log.append("Constraint Violation: Booked indirect flight.")
+
+            if self.balance >= item.price and item.seats_available > 0:
+                item.seats_available -= 1
+                self.balance -= item.price
+                self.itinerary.append(f"Flight to {item.destination}")
+                db.commit()
+            else:
+                self.error_log.append("Booking failed: Insufficient funds or seats.")
+                reward -= 0.1
+
+        elif action.item_type == "hotel":
+            item = db.query(Hotel).filter(Hotel.id == action.item_id).first()
+            if not item:
+                self.error_log.append(f"Hotel {action.item_id} not found.")
+                return -0.1
+            
+            # Constraint Validation (Rating)
+            if item.rating < self.current_goal.min_hotel_rating:
+                reward -= 1.0
+                self.error_log.append(f"Constraint Violation: Hotel rating {item.rating} < {self.current_goal.min_hotel_rating}")
+
+            if self.balance >= item.price_per_night:
+                self.balance -= item.price_per_night
+                self.itinerary.append(f"Hotel in {item.city}")
+                db.commit()
+            else:
+                self.error_log.append("Booking failed: Insufficient funds.")
+                reward -= 0.1
+                
+        db.close()
+        return reward
+
+    def _handle_finalize(self) -> Tuple[float, bool]:
+        """Finalizes the trip and awards completion reward."""
+        if len(self.itinerary) >= 2:  # Assume at least a flight and a hotel for success
+            self.error_log.append("Trip finalized. Goal achieved!")
+            return 1.0, True
+        else:
+            self.error_log.append("Trip finalized prematurely. Goal failed.")
+            return -0.5, True
+
+    @property
+    def state(self) -> State:
+        return self._state

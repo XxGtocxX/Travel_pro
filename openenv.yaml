@@ -1,0 +1,20 @@
+spec_version: 1
+name: travel_pro
+type: space
+runtime: fastapi
+app: server.app:app
+port: 8000
+
+tasks:
+  - id: baseline_trip
+    description: "Book a flight and hotel within budget"
+    grader:
+      class: travel_pro.evaluator.EfficiencyGrader
+  - id: optimize_budget
+    description: "Minimize total cost while completing the trip"
+    grader:
+      class: travel_pro.evaluator.BudgetOptimizationGrader
+  - id: chronological_trip
+    description: "Multi-city trip with consistent timestamps"
+    grader:
+      class: travel_pro.evaluator.ConstraintGrader

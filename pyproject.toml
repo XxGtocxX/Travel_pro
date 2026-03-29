@@ -1,0 +1,35 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openenv-travel_pro"
+version = "0.1.0"
+description = "Travel Pro environment for OpenEnv"
+requires-python = ">=3.10"
+dependencies = [
+    "openenv-core[core]>=0.2.1",
+    "fastapi",
+    "uvicorn",
+    "sqlalchemy",
+    "pydantic",
+    "langchain-openai",
+    "langgraph",
+    "openai",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+]
+
+[project.scripts]
+server = "travel_pro.server.app:main"
+
+[tool.setuptools]
+include-package-data = true
+packages = ["travel_pro"]
