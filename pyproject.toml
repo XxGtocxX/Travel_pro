@@ -33,4 +33,4 @@ server = "travel_pro.server.app:main"
 [tool.setuptools]
 include-package-data = true
 packages = ["server"]
-py-modules = ["agent", "client", "database", "evaluator", "models", "scenarios", "test_agent"]
+py-modules = ["agent", "database", "evaluator", "models", "scenarios", "test_agent"]
