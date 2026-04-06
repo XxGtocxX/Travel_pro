@@ -1,5 +1,5 @@
 from openenv.core import EnvClient
-from travel_pro.models import TravelAction, TravelObservation
+from models import TravelAction, TravelObservation
 
 class TravelEnv(EnvClient):
     """

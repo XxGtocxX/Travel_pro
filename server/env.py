@@ -4,9 +4,9 @@ from typing import List, Optional, Dict, Any, Tuple
 from openenv.core.env_server.interfaces import Environment
 from openenv.core.env_server.types import State
 
-from travel_pro.models import UserGoal, TravelObservation, TravelAction, Search, Book, Finalize
-from travel_pro.database import SessionLocal, init_db, bulk_insert_data, Flight, Hotel
-from travel_pro.scenarios import ScenarioManager
+from models import UserGoal, TravelObservation, TravelAction, Search, Book, Finalize
+from database import SessionLocal, init_db, bulk_insert_data, Flight, Hotel
+from scenarios import ScenarioManager
 
 class TravelEnv(Environment):
     """

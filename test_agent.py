@@ -1,6 +1,6 @@
 import os
 import argparse
-from travel_pro.agent import run_episode
+from agent import run_episode
 
 def main():
     parser = argparse.ArgumentParser(description="Manual Evaluation Client for Travel Pro Agent")

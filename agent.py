@@ -6,9 +6,9 @@ from langgraph.graph import StateGraph, END
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from travel_pro.server.env import TravelEnv
-from travel_pro.models import UserGoal, TravelObservation, TravelAction, Search, Book, Finalize
-from travel_pro.scenarios import ScenarioLevel
+from server.env import TravelEnv
+from models import UserGoal, TravelObservation, TravelAction, Search, Book, Finalize
+from scenarios import ScenarioLevel
 
 class GraphState(TypedDict):
     """State management for the Travel Pro agent graph."""

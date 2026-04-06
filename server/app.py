@@ -1,8 +1,7 @@
 from fastapi import FastAPI
 from openenv.core.env_server import HTTPEnvServer
-from travel_pro.server.env import TravelEnv
-from travel_pro.models import TravelAction, TravelObservation
-
+from server.env import TravelEnv
+from models import TravelAction, TravelObservation
 # Create the FastAPI application
 app = FastAPI(title="Travel Pro Environment Server")
 

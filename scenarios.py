@@ -1,6 +1,6 @@
 from typing import Tuple, Dict, Any
 from enum import Enum
-from travel_pro.models import UserGoal
+from models import UserGoal
 
 class ScenarioLevel(Enum):
     HAPPY_PATH = 1
